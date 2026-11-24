@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ระบบแผนการใช้จ่ายเงินบำรุง</title>
+<meta name="description" content="ระบบแผนการใช้จ่ายเงินบำรุง รพ.สต. — เปิดระบบของหน่วยงานแบบเต็มจอ ติดตั้งเป็นแอปได้">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b6aa2">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="แผนเงินบำรุง">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--pri:#0b6aa2;--pri2:#1689c4;--bg:#eff5f9;--card:#fff;--ink:#14283a;--mute:#5b6b7a;--line:#d3e2ec;--bad:#b42318;--bad-t:#fdecea}
+@media (prefers-color-scheme:dark){:root{--pri:#3aa5dd;--pri2:#7cc4f0;--bg:#0e1120;--card:#171b2b;--ink:#e7ecf3;--mute:#9aa6b8;--line:#2a3147;--bad:#ff8a80;--bad-t:#3a1d22}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:Sarabun,"Noto Sans Thai",system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);display:flex;align-items:center;justify-content:center;padding:16px}
+.box{width:100%;max-width:440px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px 22px;text-align:center;box-shadow:0 12px 32px rgba(11,106,162,.12)}
+.box img{width:76px;height:76px;border-radius:18px}
+h1{font-size:22px;margin:12px 0 2px}
+.sub{color:var(--mute);margin:0 0 18px;font-size:15px}
+.bar{height:6px;border-radius:6px;background:var(--line);overflow:hidden;margin:18px 6px 4px}
+.bar i{display:block;height:100%;width:40%;border-radius:6px;background:var(--pri2);animation:mv 1.2s ease-in-out infinite}
+@keyframes mv{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+label{display:block;text-align:left;font-weight:600;margin:6px 0}
+input{width:100%;font:inherit;font-size:15px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)}
+input:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px rgba(11,106,162,.18)}
+button{font:inherit;font-weight:600;font-size:16px;border:0;border-radius:12px;padding:12px 16px;cursor:pointer}
+.pri{width:100%;margin-top:14px;background:var(--pri);color:#fff}
+.ghost{background:transparent;color:var(--pri);border:1px solid var(--line);margin:6px 4px 0}
+.err{display:none;text-align:left;background:var(--bad-t);color:var(--bad);border-radius:12px;padding:12px;margin-top:14px;font-size:14.5px;line-height:1.55}
+.err.on{display:block}
+.note{color:var(--mute);font-size:13px;line-height:1.6;margin:16px 0 0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="box" id="vLoad">
+  <img src="icon-192.png" alt="">
+  <h1>ระบบแผนการใช้จ่ายเงินบำรุง</h1>
+  <p class="sub" id="lMsg">กำลังเปิดระบบ…</p>
+  <div class="bar" id="lBar"><i></i></div>
+  <div class="err" id="lErr"></div>
+  <div id="lAct" hidden><button class="ghost" id="bRetry" type="button">ลองใหม่</button><button class="ghost" id="bChange" type="button">เปลี่ยนลิงก์หน่วยงาน</button></div>
+</div>
+<form class="box" id="vSetup" hidden>
+  <img src="icon-192.png" alt="">
+  <h1>ระบบแผนการใช้จ่ายเงินบำรุง</h1>
+  <p class="sub">เชื่อมต่อระบบของหน่วยงาน</p>
+  <label for="u">ลิงก์ Web app ของหน่วยงาน (ลงท้ายด้วย /exec)</label>
+  <input id="u" type="url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" required>
+  <button class="pri" id="bGo" type="submit">เชื่อมต่อ</button>
+  <div class="err" id="sErr"></div>
+  <p class="note">ข้อมูล ผู้ใช้ และรหัสผ่าน อยู่ในระบบของหน่วยงานเหมือนเดิม หน้านี้ไม่เก็บข้อมูลการเงิน<br>ขอลิงก์ได้จากผู้ดูแลระบบ (⚙️ ตั้งค่า หรือ Deploy › Manage deployments)</p>
+</form>
+<script>
+/* ระบบแผนการใช้จ่ายเงินบำรุง — หน้าเปิดระบบจาก GitHub Pages (loader 1.0.0 แบบเดียวกับคลังยา V9)
+ * โหลดหน้าเว็บสดจากโปรเจกต์ Apps Script ของหน่วยงาน (?api=…/exec) แล้วส่งคำสั่งกลับไปที่โปรเจกต์นั้น
+ * ต้องมีไฟล์ WebGitHub.gs ในโปรเจกต์ระบบแผน • พัฒนาโดย นายเฉลิมพล ศรีนวลแสง นวก.สธ.ชพ. */
+(function () {
+  'use strict';
+  var LOADER = '1.0.0', K_API = 'v9w_plan_api', K_TRUST = 'v9w_plan_trusted';
+  var DEV = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  var $ = function (id) { return document.getElementById(id); };
+  function ls(k, v) {
+    try {
+      if (v === undefined) return localStorage.getItem(k);
+      if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v);
+    } catch (e) { }
+    return null;
+  }
+  /* รับเฉพาะลิงก์ Web app ของ Google Apps Script (…/exec) */
+  function norm(u) {
+    u = String(u || '').trim().replace(/[?#].*$/, '');
+    var m = /^https:\/\/script\.google\.com\/(macros|a\/macros\/[A-Za-z0-9.-]+)\/s\/([A-Za-z0-9_-]{20,})\/exec$/.exec(u);
+    if (m) return 'https://script.google.com/' + m[1] + '/s/' + m[2] + '/exec';
+    if (DEV && /^http:\/\/(localhost|127\.0\.0\.1):\d+\/[\w\/-]*exec$/.test(u)) return u;
+    return '';
+  }
+  function trusted() { try { var t = JSON.parse(ls(K_TRUST) || '[]'); return Array.isArray(t) ? t : []; } catch (e) { return []; } }
+  /* ระบบที่ยังไม่เคยเปิดในเครื่องนี้: ล้างข้อมูลที่หน้าเว็บอื่นในโดเมนนี้จำไว้ (เช่นการจำการเข้าสู่ระบบ) ก่อนให้ระบบนั้นทำงาน */
+  function trust(api) {
+    var t = trusted();
+    if (t.indexOf(api) >= 0) return;
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) { var k = localStorage.key(i); if (k && k.indexOf('v9w_') !== 0) localStorage.removeItem(k); }
+      sessionStorage.clear();
+    } catch (e) { }
+    t.push(api);
+    ls(K_TRUST, JSON.stringify(t.slice(-20)));
+  }
+  function show(id) { $('vLoad').hidden = id !== 'vLoad'; $('vSetup').hidden = id !== 'vSetup'; }
+  function err(box, html) { var b = $(box); b.innerHTML = html || ''; b.className = 'err' + (html ? ' on' : ''); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function why(e) {
+    var m = String((e && e.message) || e || '');
+    if (m === 'NOTREADY') return 'ระบบของหน่วยงานยังไม่รองรับการเปิดจากหน้านี้<br>ผู้ดูแลระบบต้องเพิ่มไฟล์ <b>WebGitHub.gs</b> ในโปรเจกต์ Apps Script ของระบบแผน แล้ว Deploy › Manage deployments › แก้ไข › <b>New version</b>';
+    if (m === 'TIMEOUT') return 'ระบบตอบช้าเกินไป ลองใหม่อีกครั้ง';
+    if (e && e.name === 'TypeError') return 'เชื่อมต่อระบบของหน่วยงานไม่ได้ ตรวจ 3 ข้อ:<br>1. ลิงก์ถูกต้อง และอินเทอร์เน็ตใช้งานได้<br>2. โปรเจกต์ Apps Script ของระบบแผนมีไฟล์ <b>WebGitHub.gs</b> และ Deploy รุ่นใหม่แล้ว (Manage deployments › แก้ไข › New version)<br>3. Web app ตั้ง <b>ผู้มีสิทธิ์เข้าถึง: ทุกคน (Anyone)</b>';
+    return esc(m || 'เปิดระบบไม่สำเร็จ');
+  }
+  function getJson(url, ms) {
+    var ctl = window.AbortController ? new AbortController() : null;
+    var tm = setTimeout(function () { if (ctl) ctl.abort(); }, ms || 90000);
+    return fetch(url, { cache: 'no-store', redirect: 'follow', signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.text(); })
+      .then(function (t) {
+        clearTimeout(tm);
+        var j = null;
+        try { j = JSON.parse(t); } catch (x) { j = null; }
+        if (!j || j.v9web !== 1) throw new Error('NOTREADY');
+        if (!j.ok) throw new Error(j.error || 'เปิดระบบไม่สำเร็จ');
+        if (j.app !== 'plan') throw new Error('ลิงก์นี้เป็นของระบบอื่น ไม่ใช่ระบบแผนการใช้จ่ายเงินบำรุง — ใช้ลิงก์ Web app ของระบบแผน');
+        return j;
+      }, function (e) { clearTimeout(tm); if (e && e.name === 'AbortError') throw new Error('TIMEOUT'); throw e; });
+  }
+  function q(api, mode) {
+    var p = new URLSearchParams(location.search);
+    p.delete('api'); p.set('__v9web', mode);
+    return api + '?' + p.toString();
+  }
+
+  /* ---------- ส่วนที่ฝังในหน้าเว็บของระบบ: แทน google.script.run ด้วยการส่งคำสั่งไปที่ doPost ---------- */
+  function shim(API, LOADER) {
+    function call(fn, args) {
+      return fetch(API, {
+        method: 'POST', redirect: 'follow', cache: 'no-store',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ __v9web: 1, fn: fn, args: args })
+      }).then(function (r) { return r.text(); }, function () {
+        throw new Error('เชื่อมต่อระบบไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่');
+      }).then(function (t) {
+        var j = null;
+        try { j = JSON.parse(t); } catch (e) { j = null; }
+        if (!j || j.v9web !== 1) throw new Error('ระบบของหน่วยงานยังไม่รองรับหน้านี้ (ต้องมีไฟล์ WebGitHub.gs และ Deploy รุ่นใหม่)');
+        if (!j.ok) throw new Error(j.error || 'เกิดข้อผิดพลาด');
+        return j.r;
+      });
+    }
+    function runner(ok, fail, uo) {
+      var fns = {
+        withSuccessHandler: function (f) { return runner(f, fail, uo); },
+        withFailureHandler: function (f) { return runner(ok, f, uo); },
+        withUserObject: function (o) { return runner(ok, fail, o); }
+      };
+      return new Proxy(fns, {
+        get: function (t, k) {
+          if (typeof k !== 'string' || k === 'then' || k === 'toJSON') return undefined;
+          if (Object.prototype.hasOwnProperty.call(t, k)) return t[k];
+          return function () {
+            var args = Array.prototype.slice.call(arguments);
+            call(k, args).then(function (r) { if (ok) ok(r, uo); }, function (e) { if (fail) fail(e, uo); else console.error(e); });
+          };
+        }
+      });
+    }
+    window.google = window.google || {};
+    window.google.script = {
+      run: runner(null, null, undefined),
+      host: { close: function () { }, setHeight: function () { }, setWidth: function () { }, origin: location.origin, editor: { focus: function () { } } },
+      url: { getLocation: function (cb) { var p = {}, ps = {}; new URLSearchParams(location.search).forEach(function (v, k) { if (k !== 'api') { if (!(k in p)) p[k] = v; (ps[k] = ps[k] || []).push(v); } }); cb({ parameter: p, parameters: ps, hash: location.hash.replace(/^#/, '') }); } }
+    };
+    window.__V9WEB = { api: API, loader: LOADER };
+  }
+
+  function render(api, j) {
+    var base = location.href.replace(/[?#].*$/, '').replace(/[^\/]*$/, '');
+    var head = '<script>(' + shim.toString() + ')(' + JSON.stringify(api) + ',' + JSON.stringify(LOADER) + ');<\/script>' +
+      '<link rel="manifest" href="' + base + 'manifest.webmanifest">' +
+      '<link rel="apple-touch-icon" href="' + base + 'icon-192.png">' +
+      '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">' +
+      '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="แผนเงินบำรุง">';
+    var src = String(j.html || '');
+    var html = src.replace(/<head(\s[^>]*)?>/i, function (m) { return m + head; });
+    if (html === src) html = head + src;
+    document.open();
+    document.write(html);
+    document.close();
+  }
+
+  function load(api) {
+    show('vLoad'); err('lErr', ''); $('lAct').hidden = true; $('lBar').hidden = false;
+    $('lMsg').textContent = 'กำลังเปิดระบบ…';
+    getJson(q(api, 'page')).then(function (j) {
+      $('lMsg').textContent = (j.title || 'กำลังเปิดระบบ') + ' • รุ่น ' + (j.ver || '');
+      render(api, j);
+    }).catch(function (e) {
+      $('lBar').hidden = true; $('lMsg').textContent = 'เปิดระบบไม่สำเร็จ';
+      err('lErr', why(e)); $('lAct').hidden = false;
+    });
+  }
+  function setup(msg) {
+    show('vSetup'); err('sErr', msg || '');
+    var cur = ls(K_API); if (cur) $('u').value = cur;
+    setTimeout(function () { try { $('u').focus(); } catch (e) { } }, 50);
+  }
+
+  $('bRetry').onclick = function () { var a = ls(K_API); if (a) load(a); else setup(); };
+  $('bChange').onclick = function () { setup(); };
+  $('vSetup').onsubmit = function (ev) {
+    ev.preventDefault();
+    var api = norm($('u').value);
+    if (!api) { err('sErr', 'ลิงก์ไม่ถูกต้อง ต้องเป็นลิงก์ Web app ของ Google Apps Script ที่ลงท้ายด้วย <b>/exec</b>'); return; }
+    $('bGo').disabled = true; $('bGo').textContent = 'กำลังตรวจลิงก์…'; err('sErr', '');
+    getJson(q(api, 'ping'), 30000).then(function () {
+      trust(api); ls(K_API, api);
+      var p = new URLSearchParams(location.search); p.set('api', api);
+      try { history.replaceState(null, '', '?' + p.toString()); } catch (e) { }
+      load(api);
+    }).catch(function (e) { err('sErr', why(e)); }).then(function () { $('bGo').disabled = false; $('bGo').textContent = 'เชื่อมต่อ'; });
+  };
+
+  var p = new URLSearchParams(location.search), raw = p.get('api');
+  var api = raw ? norm(raw) : '';
+  if (raw && !api) { setup('ลิงก์ในที่อยู่เว็บไม่ถูกต้อง ต้องเป็นลิงก์ Web app ที่ลงท้ายด้วย <b>/exec</b>'); return; }
+  if (!api) api = norm(ls(K_API));
+  if (!api) { setup(); return; }
+  trust(api); ls(K_API, api);
+  load(api);
+})();
+</script>
+</body>
+</html>
